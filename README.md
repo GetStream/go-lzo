@@ -1,7 +1,6 @@
 # go-lzo
 
-[![Build status](https://travis-ci.org/rasky/go-lzo.svg)](https://travis-ci.org/rasky/go-lzo)
-[![Coverage Status](https://coveralls.io/repos/rasky/go-lzo/badge.svg?branch=master&service=github)](https://coveralls.io/github/rasky/go-lzo?branch=master)
+[![Build status](https://travis-ci.org/rasky/go-lzo.svg)](https://travis-ci.org/GetStream/go-lzo)
 
 Native LZO1X implementation in Golang
 
