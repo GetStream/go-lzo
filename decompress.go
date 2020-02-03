@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"strings"
 )
 
 var (
