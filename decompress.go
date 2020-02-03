@@ -157,7 +157,7 @@ func Decompress1X(r io.Reader, inLen int, outLen int) (out []byte, err error) {
 		// as the reading functions are very hot in the decompressor.
 		if r := recover(); r != nil {
 			if re, ok := r.(runtime.Error); ok {
-				if re.Error() == "runtime error: index out of range" {
+				if strings.Contains(re.Error(), "index out of range") {
 					err = io.EOF
 					return
 				}
