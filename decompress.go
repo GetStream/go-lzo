@@ -288,3 +288,164 @@ match_end:
 	ip = in.ReadU8()
 	goto begin_loop
 }
+
+// Decompress an input compressed with LZO1X.
+//
+// LZO1X has a stream terminator marker, so the decompression will always stop
+// when this marker is found.
+//
+// If inLen is not zero, it is expected to match the length of the compressed
+// input stream, and it is used to limit reads from the underlying reader; if
+// inLen is smaller than the real stream, the decompression will abort with an
+// error; if inLen is larger than the real stream, or if it is zero, the
+// decompression will succeed but more bytes than necessary might be read
+// from the underlying reader. If the reader returns EOF before the termination
+// marker is found, the decompression aborts and EOF is returned.
+//
+// outLen is optional; if it's not zero, it is used as a hint to preallocate the
+// output buffer to increase performance of the decompression.
+func Decompress1XTo(r io.Reader, inLen int, outLen int, o []byte) (out []byte, err error) {
+	var t, m_pos int
+	var last2 byte
+
+	defer func() {
+		// To gain performance, we don't do any bounds checking while reading
+		// the input, so if the decompressor reads past the end of the input
+		// stream, a runtime error is raised. This saves about 7% of performance
+		// as the reading functions are very hot in the decompressor.
+		if r := recover(); r != nil {
+			if re, ok := r.(runtime.Error); ok {
+				if strings.Contains(re.Error(), "index out of range") {
+					err = io.EOF
+					return
+				}
+			}
+			panic(r)
+		}
+	}()
+
+	if cap(o) < outLen {
+		out = make([]byte, 0, outLen)
+	} else {
+		out = o[:0]
+	}
+
+	in := newReader(r, inLen)
+	ip := in.ReadU8()
+	if ip > 17 {
+		t = int(ip) - 17
+		if t < 4 {
+			goto match_next
+		}
+		in.ReadAppend(&out, t)
+		// fmt.Println("begin:", string(out))
+		goto first_literal_run
+	}
+
+begin_loop:
+	t = int(ip)
+	if t >= 16 {
+		goto match
+	}
+	if t == 0 {
+		t = in.ReadMulti(15)
+	}
+	in.ReadAppend(&out, t+3)
+	// fmt.Println("readappend", t+3, string(out[len(out)-t-3:]))
+first_literal_run:
+	ip = in.ReadU8()
+	last2 = ip
+	t = int(ip)
+	if t >= 16 {
+		goto match
+	}
+	m_pos = len(out) - (1 + m2_MAX_OFFSET)
+	m_pos -= t >> 2
+	ip = in.ReadU8()
+	m_pos -= int(ip) << 2
+	// fmt.Println("m_pos flr", m_pos, len(out), "\n", string(out))
+	if m_pos < 0 {
+		err = LookBehindUnderrun
+		return
+	}
+	copyMatch(&out, m_pos, 3)
+	goto match_done
+
+match:
+	in.Rebuffer()
+	if in.Err != nil {
+		err = in.Err
+		return
+	}
+	t = int(ip)
+	last2 = ip
+	if t >= 64 {
+		m_pos = len(out) - 1
+		m_pos -= (t >> 2) & 7
+		ip = in.ReadU8()
+		m_pos -= int(ip) << 3
+		// fmt.Println("m_pos t64", m_pos, t, int(ip))
+		t = (t >> 5) - 1
+		goto copy_match
+	} else if t >= 32 {
+		t &= 31
+		if t == 0 {
+			t = in.ReadMulti(31)
+		}
+		m_pos = len(out) - 1
+		v16 := in.ReadU16()
+		m_pos -= v16 >> 2
+		last2 = byte(v16 & 0xFF)
+		// fmt.Println("m_pos t32", m_pos)
+	} else if t >= 16 {
+		m_pos = len(out)
+		m_pos -= (t & 8) << 11
+		t &= 7
+		if t == 0 {
+			t = in.ReadMulti(7)
+		}
+		v16 := in.ReadU16()
+		m_pos -= v16 >> 2
+		if m_pos == len(out) {
+			// fmt.Println("END", t, v16, m_pos)
+			return
+		}
+		m_pos -= 0x4000
+		last2 = byte(v16 & 0xFF)
+		// fmt.Println("m_pos t16", m_pos)
+	} else {
+		m_pos = len(out) - 1
+		m_pos -= t >> 2
+		ip = in.ReadU8()
+		m_pos -= int(ip) << 2
+		if m_pos < 0 {
+			err = LookBehindUnderrun
+			return
+		}
+		// fmt.Println("m_pos tX", m_pos)
+		copyMatch(&out, m_pos, 2)
+		goto match_done
+	}
+
+copy_match:
+	if m_pos < 0 {
+		err = LookBehindUnderrun
+		return
+	}
+	copyMatch(&out, m_pos, t+2)
+
+match_done:
+	t = int(last2 & 3)
+	if t == 0 {
+		goto match_end
+	}
+match_next:
+	// fmt.Println("read append finale:", t)
+	in.ReadAppend(&out, t)
+	ip = in.ReadU8()
+	goto match
+
+match_end:
+	ip = in.ReadU8()
+	goto begin_loop
+}

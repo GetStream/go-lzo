@@ -179,8 +179,35 @@ func BenchmarkComp(b *testing.B) {
 	io.Copy(&buf, gz)
 
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		Compress1X(buf.Bytes())
+	}
+}
+
+func BenchmarkCompress1XTo(b *testing.B) {
+	f, err := os.Open("testdata/large.tar.gz")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		b.Error(err)
+		return
+	}
+	defer gz.Close()
+
+	var buf bytes.Buffer
+	io.Copy(&buf, gz)
+
+	b.ResetTimer()
+
+	var out = make([]byte, buf.Len())
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		out = Compress1XTo(buf.Bytes(), out[:0])
 	}
 }
 
@@ -203,7 +230,35 @@ func BenchmarkDecomp(b *testing.B) {
 
 	cmp := Compress1X(buf.Bytes())
 	b.ResetTimer()
+	b.ReportAllocs()
+
 	for i := 0; i < b.N; i++ {
 		Decompress1X(bytes.NewReader(cmp), len(cmp), buf.Len())
+	}
+}
+
+func BenchmarkDecompTo(b *testing.B) {
+	f, err := os.Open("testdata/large.tar.gz")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		b.Error(err)
+		return
+	}
+	defer gz.Close()
+
+	var buf bytes.Buffer
+	io.Copy(&buf, gz)
+
+	cmp := Compress1X(buf.Bytes())
+	out := make([]byte, 0, buf.Len())
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		Decompress1XTo(bytes.NewReader(cmp), len(cmp), buf.Len(), out)
 	}
 }
