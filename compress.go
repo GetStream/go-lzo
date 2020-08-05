@@ -9,8 +9,8 @@ func appendMulti(out []byte, t int) []byte {
 	return out
 }
 
-func compress(in []byte) (out []byte, sz int) {
-	var m_off int
+func compress(in []byte, out []byte) ([]byte, int) {
+	var m_off, sz int
 	in_len := len(in)
 	ip_len := in_len - m2_MAX_LEN - 5
 	dict := make([]int32, 1<<d_BITS)
@@ -144,7 +144,7 @@ func compress(in []byte) (out []byte, sz int) {
 	}
 
 	sz = in_len - ii
-	return
+	return out, sz
 }
 
 // Compress an input buffer with LZO1X
@@ -155,7 +155,7 @@ func Compress1X(in []byte) (out []byte) {
 	if in_len <= m2_MAX_LEN+5 {
 		t = in_len
 	} else {
-		out, t = compress(in)
+		out, t = compress(in, out)
 	}
 
 	if t > 0 {
@@ -175,4 +175,33 @@ func Compress1X(in []byte) (out []byte) {
 
 	out = append(out, m4_MARKER|1, 0, 0)
 	return
+}
+
+func Compress1XTo(in []byte, out []byte) []byte {
+	var t int
+
+	in_len := len(in)
+	if in_len <= m2_MAX_LEN+5 {
+		t = in_len
+	} else {
+		out, t = compress(in, out)
+	}
+
+	if t > 0 {
+		ii := in_len - t
+		if len(out) == 0 && t <= 238 {
+			out = append(out, byte(17+t))
+		} else if t <= 3 {
+			out[len(out)-2] |= byte(t)
+		} else if t <= 18 {
+			out = append(out, byte(t-3))
+		} else {
+			out = append(out, 0)
+			out = appendMulti(out, t-18)
+		}
+		out = append(out, in[ii:ii+t]...)
+	}
+
+	out = append(out, m4_MARKER|1, 0, 0)
+	return out
 }
