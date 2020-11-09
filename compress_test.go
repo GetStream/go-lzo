@@ -184,6 +184,17 @@ func BenchmarkComp(b *testing.B) {
 	}
 }
 
+func BenchmarkComp2(b *testing.B) {
+	var testString = []byte("The quick brown fox jumps over the lazy dog")
+	b.ResetTimer()
+	b.ReportAllocs()
+	var sink []byte
+	for i := 0; i < b.N; i++ {
+		sink = Compress1X(testString)
+	}
+	_ = sink
+}
+
 func BenchmarkDecomp(b *testing.B) {
 	f, err := os.Open("testdata/large.tar.gz")
 	if err != nil {

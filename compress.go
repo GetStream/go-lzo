@@ -13,7 +13,7 @@ func compress(in []byte) (out []byte, sz int) {
 	var m_off int
 	in_len := len(in)
 	ip_len := in_len - m2_MAX_LEN - 5
-	dict := make([]int32, 1<<d_BITS)
+	var dict [1 << d_BITS]int32
 	ii := 0
 	ip := 4
 	for {
